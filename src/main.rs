@@ -19,7 +19,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugin(FixedTimePlugin)
-        .add_plugin(FreeControlPlugin::<FreeCam>::new())
+        .add_plugin(FreeControlPlugin::<FreeCam>::default())
         .add_startup_system(setup_camera_and_light)
         .add_startup_system(setup_environment);
     app.run();

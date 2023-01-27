@@ -12,16 +12,23 @@ use bevy::window::{CursorGrabMode, Windows};
 use serde::{Deserialize, Serialize};
 use crate::keybind::{KeyBindingPlugin, RawInput};
 
-/// Adds free-moving controls to a 3D object, (insert the `FreeControllable` component to your
-/// entity of choice) todo FreeControllable replaced with user-defined type
+/// Adds free-moving controls to a 3D object, the generic `T` specifies what component this plugin
+/// will target with it's control. This plugin can be initialized in two ways:
+///
+/// * No default bindings [FreeControlPlugin::new]
+/// * regular WASD controls, left shift for down, space for up [FreeControlPlugin::default]
 pub struct FreeControlPlugin<T: Component> {
     key_bindings: KeyBindingPlugin<FreeControls<T>>,
     __phantom: PhantomData<fn(T)>
 }
 
 impl <T: Component> FreeControlPlugin<T> {
+    /// Creates a new `FreeControlPlugin`, without any default bindings
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            key_bindings: KeyBindingPlugin::default(),
+            __phantom: default()
+        }
     }
 
     pub fn bind(mut self, input: impl Into<RawInput>, bind: FreeControls<T>) -> Self {
@@ -100,6 +107,7 @@ impl <T> FreeControls<T> {
 }
 
 pub fn free_controls<T: Component>(mut windows: ResMut<Windows>, mut ev_motion: EventReader<MouseMotion>, binds: Res<Input<FreeControls<T>>>, mut query: Query<&mut Transform, With<T>>) {
+    // todo remove forced usage of MouseMotion, likely requires some rewriting of KeyBindingPlugin
     // todo camera speed and sensitivity settings
     // todo needs to handle multiple windows
     let window = windows.get_primary_mut().unwrap();
