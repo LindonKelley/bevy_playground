@@ -12,8 +12,8 @@ use bevy::window::{CursorGrabMode, Windows};
 use serde::{Deserialize, Serialize};
 use crate::keybind::{KeyBindingPlugin, RawInput};
 
-/// Adds free-moving controls to a 3D object, the generic `T` specifies what component this plugin
-/// will target with it's control. This plugin can be initialized in two ways:
+/// Adds free-moving controls to 3D objects, specifically all objects with the component
+/// [Transform] and the provided generic [T]. This plugin can be initialized in two ways:
 ///
 /// * No default bindings [FreeControlPlugin::new]
 /// * regular WASD controls, left shift for down, space for up [FreeControlPlugin::default]
@@ -106,7 +106,7 @@ impl <T> FreeControls<T> {
     }
 }
 
-pub fn free_controls<T: Component>(mut windows: ResMut<Windows>, mut ev_motion: EventReader<MouseMotion>, binds: Res<Input<FreeControls<T>>>, mut query: Query<&mut Transform, With<T>>) {
+pub fn free_controls<T: Component>(mut windows: ResMut<Windows>, mut ev_motion: EventReader<MouseMotion>, binds: Res<Input<FreeControls<T>>>, mut transforms: Query<&mut Transform, With<T>>) {
     // todo remove forced usage of MouseMotion, likely requires some rewriting of KeyBindingPlugin
     // todo camera speed and sensitivity settings
     // todo needs to handle multiple windows
@@ -132,30 +132,31 @@ pub fn free_controls<T: Component>(mut windows: ResMut<Windows>, mut ev_motion: 
         }
         rotation_move *= 0.5;
 
-        let mut transform = query.single_mut();
-        if rotation_move.length_squared() > 0.0 {
-            let yaw = Quat::from_rotation_y(-rotation_move.x / window.width() * TAU);
-            let pitch = Quat::from_rotation_x(-rotation_move.y / window.height() * PI);
-            transform.rotation = yaw * transform.rotation; // rotate around global y axis
-            transform.rotation = transform.rotation * pitch; // rotate around local x axis
-        }
-
-        let mut handle = |input, f: fn(&Transform) -> Vec3| {
-            if binds.pressed(input) {
-                let delta = f(&transform) * 0.5;
-                transform.translation += delta;
+        for mut transform in &mut transforms {
+            if rotation_move.length_squared() > 0.0 {
+                let yaw = Quat::from_rotation_y(-rotation_move.x / window.width() * TAU);
+                let pitch = Quat::from_rotation_x(-rotation_move.y / window.height() * PI);
+                transform.rotation = yaw * transform.rotation; // rotate around global y axis
+                transform.rotation = transform.rotation * pitch; // rotate around local x axis
             }
-        };
 
-        {
-            use FreeControls::*;
+            let mut handle = |input, f: fn(&Transform) -> Vec3| {
+                if binds.pressed(input) {
+                    let delta = f(&transform) * 0.5;
+                    transform.translation += delta;
+                }
+            };
 
-            handle(Forward, Transform::forward);
-            handle(Backward, Transform::back);
-            handle(Left, Transform::left);
-            handle(Right, Transform::right);
-            handle(Up, Transform::up);
-            handle(Down, Transform::down);
+            {
+                use FreeControls::*;
+
+                handle(Forward, Transform::forward);
+                handle(Backward, Transform::back);
+                handle(Left, Transform::left);
+                handle(Right, Transform::right);
+                handle(Up, Transform::up);
+                handle(Down, Transform::down);
+            }
         }
     }
 }
