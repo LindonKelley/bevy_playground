@@ -6,17 +6,20 @@ use bevy::app::{App, Plugin};
 use bevy::input::Input;
 use bevy::input::mouse::MouseMotion;
 use bevy::math::{Quat, Vec2, Vec3};
-use bevy::prelude::{Component, EventReader, MouseButton, Query, Res, ResMut, Transform, With};
+use bevy::prelude::{Component, EventReader, MouseButton, Query, Res, ResMut, Resource, Transform, With};
 use bevy::utils::default;
 use bevy::window::{CursorGrabMode, Windows};
 use serde::{Deserialize, Serialize};
 use crate::keybind::{KeyBindingPlugin, RawInput};
 
-/// Adds free-moving controls to 3D objects, specifically all objects with the component
+/// Adds free-moving controls to 3D objects, specifically all entities with the component
 /// [Transform] and the provided generic [T]. This plugin can be initialized in two ways:
 ///
 /// * No default bindings [FreeControlPlugin::new]
 /// * regular WASD controls, left shift for down, space for up [FreeControlPlugin::default]
+///
+/// The [FreeControlConfig] resource can be used to control the speed and sensitivity of the
+/// entities
 pub struct FreeControlPlugin<T: Component> {
     key_bindings: KeyBindingPlugin<FreeControls<T>>,
     __phantom: PhantomData<fn(T)>
@@ -72,6 +75,9 @@ impl <T: Component> Plugin for FreeControlPlugin<T> {
         app
             .add_plugin(self.key_bindings.clone())
             .add_system(free_controls::<T>);
+        if !app.world.contains_resource::<FreeControlConfig<T>>() {
+            app.insert_resource(FreeControlConfig::<T>::default());
+        }
     }
 }
 
@@ -90,29 +96,44 @@ pub enum FreeControls<T> {
     __phantom(PhantomData<fn(T)>)
 }
 
-impl <T> FreeControls<T> {
-    fn to_num(self) -> u32 {
-        match self {
-            FreeControls::Forward => 0,
-            FreeControls::Backward => 1,
-            FreeControls::Left => 2,
-            FreeControls::Right => 3,
-            FreeControls::Up => 4,
-            FreeControls::Down => 5,
-            FreeControls::Locked => 6,
-            FreeControls::Unlock => 7,
-            FreeControls::__phantom(_) => 8,
+#[derive(Resource)]
+pub struct FreeControlConfig<T> {
+    pub forward_speed: f32,
+    pub backward_speed: f32,
+    pub left_speed: f32,
+    pub right_speed: f32,
+    pub up_speed: f32,
+    pub down_speed: f32,
+    pub __phantom: PhantomData<fn(T)>
+}
+
+impl <T> Default for FreeControlConfig<T> {
+    fn default() -> Self {
+        Self {
+            forward_speed: 0.5,
+            backward_speed: 0.5,
+            left_speed: 0.5,
+            right_speed: 0.5,
+            up_speed: 0.5,
+            down_speed: 0.5,
+            __phantom: default(),
         }
     }
 }
 
-pub fn free_controls<T: Component>(mut windows: ResMut<Windows>, mut ev_motion: EventReader<MouseMotion>, binds: Res<Input<FreeControls<T>>>, mut transforms: Query<&mut Transform, With<T>>) {
+pub fn free_controls<T: Component>(
+    mut windows: ResMut<Windows>,
+    mut ev_motion: EventReader<MouseMotion>,
+    config: Res<FreeControlConfig<T>>,
+    binds: Res<Input<FreeControls<T>>>,
+    mut transforms: Query<&mut Transform, With<T>>
+) {
     // todo remove forced usage of MouseMotion, likely requires some rewriting of KeyBindingPlugin
     // todo camera speed and sensitivity settings
     // todo needs to handle multiple windows
     let window = windows.get_primary_mut().unwrap();
-    // todo lock and unlock should probably be state based, and sent to the camera via Events
-    // todo need to add aggressive locking, but leave it as an option in game
+    // todo lock and unlock should be state based, and removed from this module due to being out of scope (this isn't just for controlling cameras)
+    //  also needs aggressive locking, but leave it as an option in game
     // matches! seems to be necessary here, as locking the cursor grab mode more than once causes
     // it to behave as if it's unlocked, at least on my system, Arch Linux, (KDE x11)
     if binds.just_pressed(FreeControls::Locked) && !matches!(window.cursor_grab_mode(), CursorGrabMode::Locked) {
@@ -140,9 +161,9 @@ pub fn free_controls<T: Component>(mut windows: ResMut<Windows>, mut ev_motion: 
                 transform.rotation = transform.rotation * pitch; // rotate around local x axis
             }
 
-            let mut handle = |input, f: fn(&Transform) -> Vec3| {
+            let mut handle = |input, f: fn(&Transform) -> Vec3, speed| {
                 if binds.pressed(input) {
-                    let delta = f(&transform) * 0.5;
+                    let delta = f(&transform) * speed;
                     transform.translation += delta;
                 }
             };
@@ -150,13 +171,29 @@ pub fn free_controls<T: Component>(mut windows: ResMut<Windows>, mut ev_motion: 
             {
                 use FreeControls::*;
 
-                handle(Forward, Transform::forward);
-                handle(Backward, Transform::back);
-                handle(Left, Transform::left);
-                handle(Right, Transform::right);
-                handle(Up, Transform::up);
-                handle(Down, Transform::down);
+                handle(Forward, Transform::forward, config.forward_speed);
+                handle(Backward, Transform::back, config.backward_speed);
+                handle(Left, Transform::left, config.left_speed);
+                handle(Right, Transform::right, config.right_speed);
+                handle(Up, Transform::up, config.up_speed);
+                handle(Down, Transform::down, config.down_speed);
             }
+        }
+    }
+}
+
+impl <T> FreeControls<T> {
+    fn to_num(self) -> u32 {
+        match self {
+            FreeControls::Forward => 0,
+            FreeControls::Backward => 1,
+            FreeControls::Left => 2,
+            FreeControls::Right => 3,
+            FreeControls::Up => 4,
+            FreeControls::Down => 5,
+            FreeControls::Locked => 6,
+            FreeControls::Unlock => 7,
+            FreeControls::__phantom(_) => 8,
         }
     }
 }
@@ -188,7 +225,9 @@ impl <T> Ord for FreeControls<T> {
 
 impl <T> PartialEq for FreeControls<T> {
     fn eq(&self, other: &Self) -> bool {
-        matches!(self, other)
+        let a = self.to_num();
+        let b = other.to_num();
+        a == b
     }
 }
 

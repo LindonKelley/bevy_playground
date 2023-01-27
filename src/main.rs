@@ -1,5 +1,5 @@
 mod keybind;
-mod free_controllable;
+mod free_control;
 mod fixed_time;
 
 use bevy::app::App;
@@ -11,7 +11,7 @@ use bevy::prelude::{Camera3dBundle, Color, Commands, Component, Mesh, ResMut, sh
 use bevy::utils::default;
 use bevy_rapier3d::plugin::{NoUserData, RapierPhysicsPlugin};
 use crate::fixed_time::FixedTimePlugin;
-use crate::free_controllable::FreeControlPlugin;
+use crate::free_control::FreeControlPlugin;
 
 fn main() {
     let mut app = App::new();
