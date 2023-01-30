@@ -104,6 +104,12 @@ pub struct FreeControlConfig<T> {
     pub right_speed: f32,
     pub up_speed: f32,
     pub down_speed: f32,
+
+    pub left_sensitivity: f32,
+    pub right_sensitivity: f32,
+    pub up_sensitivity: f32,
+    pub down_sensitivity: f32,
+
     pub __phantom: PhantomData<fn(T)>
 }
 
@@ -116,7 +122,13 @@ impl <T> Default for FreeControlConfig<T> {
             right_speed: 0.5,
             up_speed: 0.5,
             down_speed: 0.5,
-            __phantom: default(),
+
+            left_sensitivity: 0.5,
+            right_sensitivity: 0.5,
+            up_sensitivity: 0.5,
+            down_sensitivity: 0.5,
+
+            __phantom: default()
         }
     }
 }
@@ -129,10 +141,10 @@ pub fn free_controls<T: Component>(
     mut transforms: Query<&mut Transform, With<T>>
 ) {
     // todo remove forced usage of MouseMotion, likely requires some rewriting of KeyBindingPlugin
-    // todo camera speed and sensitivity settings
     // todo needs to handle multiple windows
     let window = windows.get_primary_mut().unwrap();
-    // todo lock and unlock should be state based, and removed from this module due to being out of scope (this isn't just for controlling cameras)
+    // todo lock and unlock should be state based, and removed from this
+    //  module due to being out of scope (this isn't just for controlling cameras)
     //  also needs aggressive locking, but leave it as an option in game
     // matches! seems to be necessary here, as locking the cursor grab mode more than once causes
     // it to behave as if it's unlocked, at least on my system, Arch Linux, (KDE x11)
@@ -149,17 +161,24 @@ pub fn free_controls<T: Component>(
     if matches!(window.cursor_grab_mode(), CursorGrabMode::Locked) {
         let mut rotation_move = Vec2::ZERO;
         for motion in ev_motion.iter() {
-            rotation_move += motion.delta;
+            let Vec2 {x, y} = motion.delta;
+            if x < 0.0 {
+                rotation_move.x += x * config.left_sensitivity;
+            } else {
+                rotation_move.x += x * config.right_sensitivity;
+            }
+            if y < 0.0 {
+                rotation_move.y += y * config.up_sensitivity;
+            } else {
+                rotation_move.y += y * config.down_sensitivity;
+            }
         }
-        rotation_move *= 0.5;
 
         for mut transform in &mut transforms {
-            if rotation_move.length_squared() > 0.0 {
-                let yaw = Quat::from_rotation_y(-rotation_move.x / window.width() * TAU);
-                let pitch = Quat::from_rotation_x(-rotation_move.y / window.height() * PI);
-                transform.rotation = yaw * transform.rotation; // rotate around global y axis
-                transform.rotation = transform.rotation * pitch; // rotate around local x axis
-            }
+            let yaw = Quat::from_rotation_y(-rotation_move.x / window.width() * TAU);
+            let pitch = Quat::from_rotation_x(-rotation_move.y / window.height() * PI);
+            transform.rotation = yaw * transform.rotation; // rotate around global y axis
+            transform.rotation = transform.rotation * pitch; // rotate around local x axis
 
             let mut handle = |input, f: fn(&Transform) -> Vec3, speed| {
                 if binds.pressed(input) {
