@@ -6,7 +6,7 @@ use bevy::app::{App, Plugin};
 use bevy::input::Input;
 use bevy::input::mouse::MouseMotion;
 use bevy::math::{Quat, Vec2, Vec3};
-use bevy::prelude::{Component, EventReader, MouseButton, Query, Res, ResMut, Resource, Transform, With};
+use bevy::prelude::{Component, EventReader, Query, Res, ResMut, Resource, Transform, With};
 use bevy::utils::default;
 use bevy::window::{CursorGrabMode, Windows};
 use serde::{Deserialize, Serialize};
@@ -59,9 +59,7 @@ impl <T: Component> Default for FreeControlPlugin<T> {
             .bind(A, FreeControls::Left)
             .bind(D, FreeControls::Right)
             .bind(LShift, FreeControls::Down)
-            .bind(Space, FreeControls::Up)
-            .bind(MouseButton::Left, FreeControls::Locked)
-            .bind(Escape, FreeControls::Unlock);
+            .bind(Space, FreeControls::Up);
 
         Self {
             key_bindings,
@@ -90,8 +88,6 @@ pub enum FreeControls<T> {
     Right,
     Up,
     Down,
-    Locked,
-    Unlock,
     #[allow(non_camel_case_types)]
     __phantom(PhantomData<fn(T)>)
 }
@@ -123,10 +119,10 @@ impl <T> Default for FreeControlConfig<T> {
             up_speed: 0.5,
             down_speed: 0.5,
 
-            left_sensitivity: 0.5,
-            right_sensitivity: 0.5,
-            up_sensitivity: 0.5,
-            down_sensitivity: 0.5,
+            left_sensitivity: 0.5 * TAU,
+            right_sensitivity: 0.5 * TAU,
+            up_sensitivity: 0.5 * PI,
+            down_sensitivity: 0.5 * PI,
 
             __phantom: default()
         }
@@ -138,25 +134,11 @@ pub fn free_controls<T: Component>(
     mut ev_motion: EventReader<MouseMotion>,
     config: Res<FreeControlConfig<T>>,
     binds: Res<Input<FreeControls<T>>>,
-    mut transforms: Query<&mut Transform, With<T>>
+    mut free_control: Query<&mut Transform, With<T>>
 ) {
     // todo remove forced usage of MouseMotion, likely requires some rewriting of KeyBindingPlugin
-    // todo needs to handle multiple windows
+    // todo needs to handle multiple windows, going to wait until Bevy updates to having Windows as Entities
     let window = windows.get_primary_mut().unwrap();
-    // todo lock and unlock should be state based, and removed from this
-    //  module due to being out of scope (this isn't just for controlling cameras)
-    //  also needs aggressive locking, but leave it as an option in game
-    // matches! seems to be necessary here, as locking the cursor grab mode more than once causes
-    // it to behave as if it's unlocked, at least on my system, Arch Linux, (KDE x11)
-    if binds.just_pressed(FreeControls::Locked) && !matches!(window.cursor_grab_mode(), CursorGrabMode::Locked) {
-        window.set_cursor_grab_mode(CursorGrabMode::Locked);
-        window.set_cursor_position(Vec2::new(window.width() / 2.0, window.height() / 2.0));
-        window.set_cursor_visibility(false);
-    }
-    if binds.just_pressed(FreeControls::Unlock) {
-        window.set_cursor_grab_mode(CursorGrabMode::None);
-        window.set_cursor_visibility(true);
-    }
 
     if matches!(window.cursor_grab_mode(), CursorGrabMode::Locked) {
         let mut rotation_move = Vec2::ZERO;
@@ -174,9 +156,9 @@ pub fn free_controls<T: Component>(
             }
         }
 
-        for mut transform in &mut transforms {
-            let yaw = Quat::from_rotation_y(-rotation_move.x / window.width() * TAU);
-            let pitch = Quat::from_rotation_x(-rotation_move.y / window.height() * PI);
+        for mut transform in &mut free_control {
+            let yaw = Quat::from_rotation_y(-rotation_move.x / window.width());
+            let pitch = Quat::from_rotation_x(-rotation_move.y / window.height());
             transform.rotation = yaw * transform.rotation; // rotate around global y axis
             transform.rotation = transform.rotation * pitch; // rotate around local x axis
 
@@ -210,9 +192,7 @@ impl <T> FreeControls<T> {
             FreeControls::Right => 3,
             FreeControls::Up => 4,
             FreeControls::Down => 5,
-            FreeControls::Locked => 6,
-            FreeControls::Unlock => 7,
-            FreeControls::__phantom(_) => 8,
+            FreeControls::__phantom(_) => 6,
         }
     }
 }

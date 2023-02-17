@@ -1,15 +1,20 @@
 mod keybind;
 mod free_control;
 mod fixed_time;
+mod cursor_grab;
 
 use bevy::app::App;
 use bevy::asset::Assets;
 use bevy::DefaultPlugins;
+use bevy::input::Input;
+use bevy::log::info;
 use bevy::math::Vec3;
 use bevy::pbr::{DirectionalLight, DirectionalLightBundle, PbrBundle, StandardMaterial};
-use bevy::prelude::{Camera3dBundle, Color, Commands, Component, Mesh, ResMut, shape, Transform};
+use bevy::prelude::{Camera3dBundle, Color, Commands, Component, IntoSystemDescriptor, KeyCode, Mesh, MouseButton, Res, ResMut, shape, Transform};
 use bevy::utils::default;
+use bevy::window::{WindowMode, Windows};
 use bevy_rapier3d::plugin::{NoUserData, RapierPhysicsPlugin};
+use crate::cursor_grab::{cursor_grab, CursorGrab, CursorGrabPlugin};
 use crate::fixed_time::FixedTimePlugin;
 use crate::free_control::FreeControlPlugin;
 
@@ -20,8 +25,11 @@ fn main() {
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugin(FixedTimePlugin)
         .add_plugin(FreeControlPlugin::<FreeCam>::default())
+        .add_plugin(CursorGrabPlugin)
         .add_startup_system(setup_camera_and_light)
-        .add_startup_system(setup_environment);
+        .add_startup_system(setup_environment)
+        .add_system(toggle_cursor_grab.before(cursor_grab))
+        .add_system(toggle_fullscreen);
     app.run();
 }
 
@@ -46,7 +54,7 @@ fn setup_camera_and_light(mut commands: Commands) {
     });
 }
 
-fn setup_environment(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
+fn setup_environment(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>, mut cursor_grab: ResMut<CursorGrab>) {
     let meshes = &mut meshes;
     commands
         .spawn(PbrBundle {
@@ -54,4 +62,26 @@ fn setup_environment(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, m
             material: materials.add(Color::rgb(0.6, 0.6, 0.6).into()),
             ..default()
         });
+    cursor_grab.activate();
+}
+
+fn toggle_cursor_grab(mut cursor_grab: ResMut<CursorGrab>, key_codes: Res<Input<KeyCode>>, mouse_buttons: Res<Input<MouseButton>>) {
+    if mouse_buttons.just_pressed(MouseButton::Left) && cursor_grab.is_inactive() {
+        info!("activated");
+        cursor_grab.activate();
+    }
+    if key_codes.just_pressed(KeyCode::Escape) && cursor_grab.is_active() {
+        info!("deactivated");
+        cursor_grab.deactivate();
+    }
+}
+
+fn toggle_fullscreen(key_codes: Res<Input<KeyCode>>, mut windows: ResMut<Windows>) {
+    if key_codes.just_pressed(KeyCode::F11) {
+        if !matches!(windows.primary().mode(), WindowMode::BorderlessFullscreen) {
+            windows.primary_mut().set_mode(WindowMode::BorderlessFullscreen);
+        } else {
+            windows.primary_mut().set_mode(WindowMode::Windowed);
+        }
+    }
 }
